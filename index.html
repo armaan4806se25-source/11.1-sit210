@@ -1,0 +1,388 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Flood Drain Monitoring</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #eef2f7;
+    color: #172033;
+}
+
+header {
+    background: #142b49;
+    color: white;
+    padding: 24px;
+}
+
+header h1 {
+    margin: 0 0 8px;
+}
+
+header p {
+    margin: 0;
+    color: #cbd5e1;
+}
+
+.container {
+    max-width: 1200px;
+    margin: auto;
+    padding: 22px;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.connection {
+    padding: 10px 15px;
+    border-radius: 20px;
+    background: #e5e7eb;
+    font-weight: bold;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 13px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+}
+
+.card h3 {
+    margin: 0 0 15px;
+    color: #64748b;
+    font-size: 15px;
+}
+
+.value {
+    font-size: 30px;
+    font-weight: bold;
+}
+
+.unit {
+    font-size: 15px;
+    color: #64748b;
+}
+
+.status {
+    display: inline-block;
+    padding: 9px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    background: #e5e7eb;
+}
+
+.normal {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.critical {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.fault {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.bar {
+    height: 13px;
+    background: #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 15px;
+}
+
+.bar-fill {
+    height: 100%;
+    width: 0%;
+    background: #2563eb;
+    transition: width 0.4s;
+}
+
+.indicator {
+    font-size: 21px;
+    font-weight: bold;
+}
+
+.on {
+    color: #dc2626;
+}
+
+.off {
+    color: #16a34a;
+}
+
+.chart-card {
+    margin-top: 18px;
+}
+
+canvas {
+    width: 100%;
+    height: 260px;
+}
+
+.footer {
+    text-align: center;
+    padding: 25px;
+    color: #64748b;
+    font-size: 13px;
+}
+
+@media(max-width: 600px) {
+    header h1 {
+        font-size: 21px;
+    }
+
+    .value {
+        font-size: 25px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>Smart Flood Drain Monitoring System</h1>
+    <p>Real-Time Flood Monitoring Dashboard</p>
+</header>
+
+<div class="container">
+
+    <div class="topbar">
+        <h2>System Overview</h2>
+        <div class="connection" id="connection">
+            Connecting...
+        </div>
+    </div>
+
+    <div class="grid">
+
+        <div class="card">
+            <h3>Water Level</h3>
+            <div class="value">
+                <span id="waterLevel">0.0</span>
+                <span class="unit">mm</span>
+            </div>
+            <div class="bar">
+                <div class="bar-fill" id="waterBar"></div>
+            </div>
+            <p>Maximum level: 100 mm</p>
+        </div>
+
+        <div class="card">
+            <h3>Flood Status</h3>
+            <div class="status fault" id="floodStatus">
+                Waiting
+            </div>
+            <p>Current system condition</p>
+        </div>
+
+        <div class="card">
+            <h3>Rain Sensor</h3>
+            <div class="value" id="rainStatus">--</div>
+            <p>Rain ADC: <span id="rainADC">0</span></p>
+        </div>
+
+        <div class="card">
+            <h3>Water Flow Rate</h3>
+            <div class="value">
+                <span id="flowRate">0.00</span>
+                <span class="unit">L/min</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Water Pump</h3>
+            <div class="indicator off" id="pump">OFF</div>
+        </div>
+
+        <div class="card">
+            <h3>Buzzer</h3>
+            <div class="indicator off" id="buzzer">OFF</div>
+        </div>
+
+        <div class="card">
+            <h3>Drainage Gate</h3>
+            <div class="indicator off" id="gate">CLOSED</div>
+        </div>
+
+    </div>
+
+    <div class="card chart-card">
+        <h3>Water Level History</h3>
+        <canvas id="waterChart"></canvas>
+    </div>
+
+    <div class="card chart-card">
+        <h3>System Information</h3>
+        <p>Arduino connection: <strong id="arduinoStatus">Waiting</strong></p>
+        <p>Last update: <strong id="lastUpdate">No data received</strong></p>
+    </div>
+
+</div>
+
+<div class="footer">
+    Smart Flood Drain Monitoring System | Raspberry Pi Dashboard
+</div>
+
+<script>
+const history = [];
+const maxPoints = 30;
+
+function setIndicator(id, active, activeText, inactiveText) {
+    const element = document.getElementById(id);
+    element.textContent = active ? activeText : inactiveText;
+    element.className = active ? "indicator on" : "indicator off";
+}
+
+function drawChart() {
+    const canvas = document.getElementById("waterChart");
+    const ctx = canvas.getContext("2d");
+
+    const width = canvas.clientWidth;
+    const height = 260;
+    const ratio = window.devicePixelRatio || 1;
+
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+
+    ctx.scale(ratio, ratio);
+    ctx.clearRect(0, 0, width, height);
+
+    const padding = 30;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+
+    ctx.strokeStyle = "#dbe3ee";
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i <= 4; i++) {
+        const y = padding + chartHeight * i / 4;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(width - padding, y);
+        ctx.stroke();
+
+        ctx.fillStyle = "#64748b";
+        ctx.font = "11px Arial";
+        ctx.fillText(String(100 - i * 25), 3, y + 4);
+    }
+
+    if (history.length < 2) return;
+
+    ctx.beginPath();
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 3;
+
+    history.forEach((value, index) => {
+        const x = padding + index * chartWidth / (maxPoints - 1);
+        const y = padding + chartHeight -
+            (Math.max(0, Math.min(100, value)) / 100) * chartHeight;
+
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+
+    ctx.stroke();
+}
+
+async function updateDashboard() {
+    try {
+        const response = await fetch("/api/data", { cache: "no-store" });
+
+        if (!response.ok) throw new Error("Server error");
+
+        const data = await response.json();
+
+        const connection = document.getElementById("connection");
+        const status = document.getElementById("floodStatus");
+
+        if (!data.connected) {
+            connection.textContent = "Arduino Disconnected";
+            connection.style.color = "#991b1b";
+            document.getElementById("arduinoStatus").textContent = "Offline";
+            return;
+        }
+
+        connection.textContent = "Arduino Connected";
+        connection.style.color = "#166534";
+        document.getElementById("arduinoStatus").textContent = "Online";
+
+        document.getElementById("waterLevel").textContent =
+            Number(data.waterLevel).toFixed(1);
+
+        document.getElementById("waterBar").style.width =
+            Math.max(0, Math.min(100, Number(data.waterLevel))) + "%";
+
+        document.getElementById("rainADC").textContent = data.rainADC;
+
+        document.getElementById("rainStatus").textContent =
+            data.rainDetected ? "RAIN DETECTED" : "NO RAIN";
+
+        document.getElementById("flowRate").textContent =
+            Number(data.flowRate).toFixed(2);
+
+        status.textContent = data.floodStatus;
+        status.className = "status";
+
+        if (data.floodStatus === "Normal") status.classList.add("normal");
+        else if (data.floodStatus === "Warning") status.classList.add("warning");
+        else if (data.floodStatus === "Critical") status.classList.add("critical");
+        else status.classList.add("fault");
+
+        setIndicator("pump", data.pumpOn, "ON", "OFF");
+        setIndicator("buzzer", data.buzzerOn, "ON", "OFF");
+        setIndicator("gate", data.gateOpen, "OPEN", "CLOSED");
+
+        document.getElementById("lastUpdate").textContent =
+            new Date(data.lastUpdate * 1000).toLocaleTimeString();
+
+        history.push(Number(data.waterLevel));
+        if (history.length > maxPoints) history.shift();
+
+        drawChart();
+
+    } catch (error) {
+        document.getElementById("connection").textContent = "Server Disconnected";
+        document.getElementById("connection").style.color = "#991b1b";
+        document.getElementById("arduinoStatus").textContent = "Unavailable";
+    }
+}
+
+window.addEventListener("resize", drawChart);
+
+updateDashboard();
+setInterval(updateDashboard, 1000);
+</script>
+
+</body>
+</html>
